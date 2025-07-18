@@ -62,7 +62,7 @@
       display: inline-block;
     }
 
-    #params {
+    .params-section {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 6px;
@@ -85,11 +85,11 @@
 
     .param-row input[type="number"] {
       width: 100%;
-      max-height: 30px;
-      padding: 2px 5px;
+      padding: 2px 2px;
       border: 1px solid #ccc;
       border-radius: 4px;
       font-size: 14px;
+      max-height: 30px;
     }
 
     .param-row small {
@@ -110,7 +110,7 @@
     }
 
     @media (max-width: 768px) {
-      #params {
+      .params-section {
         grid-template-columns: 1fr;
       }
     }
@@ -134,14 +134,44 @@
     .pt-24 {
       padding-top: 96px;
     }
-  </style>
 
+    /* Стили для вкладок */
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      background: #f1f1f1;
+      border: 1px solid #ddd;
+      border-bottom: none;
+      border-radius: 5px 5px 0 0;
+      margin-right: 5px;
+    }
+
+    .tab.active {
+      background: #fff;
+      border-bottom: 1px solid #fff;
+      margin-bottom: -1px;
+      font-weight: bold;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+  </style>
 </head>
 
 <body>
   <header
     class="fixed top-0 left-0 right-0 bg-gray-800 text-white p-4 z-50 flex justify-between items-center shadow-md">
-
     <h1>Генератор пресетов .enc с разбросом</h1>
     <div id="buttons">
       <button id="generateBtn">Генерировать и сохранить .enc</button>
@@ -149,16 +179,31 @@
       <input type="file" id="loadFromFile" style="display:none">
       <label for="loadFromFile" class="file-button">📂 Загрузить настройки из файла</label>
       <button id="resetBtn">Сброс настроек</button>
-
     </div>
   </header>
   <div class="pt-24"></div>
 
   <div id="container">
-    <div id="params"></div>
+    <!-- Вкладки -->
+    <div class="tabs">
+      <div class="tab active" data-tab="color">Цветокоррекция</div>
+      <div class="tab" data-tab="equalizer">Эквалайзер</div>
+    </div>
+
+    <!-- Контент вкладки "Цветокоррекция" -->
+    <div id="color-tab" class="tab-content active">
+      <div id="color-params" class="params-section"></div>
+    </div>
+
+    <!-- Контент вкладки "Эквалайзер" -->
+    <div id="equalizer-tab" class="tab-content">
+      <div id="equalizer-params" class="params-section"></div>
+    </div>
+
     <pre id="panelTcColor"></pre>
   </div>
   <script>
+    const SETTINGS_FILE_NAME = "settings.json";
 
     const sliderNames = {
       "sliderExposure": "Экспозиция",
@@ -180,16 +225,16 @@
       "sliderVignette": "Виньетирование",
       "sliderAngle": "Угол",
       "sliderZoom": "Масштаб",
-      "sliderEQ1": "Эквалайзер 60 Гц",
-      "sliderEQ2": "Эквалайзер 170 Гц",
-      "sliderEQ3": "Эквалайзер 310 Гц",
-      "sliderEQ4": "Эквалайзер 600 Гц",
-      "sliderEQ5": "Эквалайзер 1 кГц",
-      "sliderEQ6": "Эквалайзер 3 кГц",
-      "sliderEQ7": "Эквалайзер 6 кГц",
-      "sliderEQ8": "Эквалайзер 12 кГц",
-      "sliderEQ9": "Эквалайзер 14 кГц",
-      "sliderEQ10": "Эквалайзер 16 кГц",
+      "sliderEQ1": "60 Гц",
+      "sliderEQ2": "170 Гц",
+      "sliderEQ3": "310 Гц",
+      "sliderEQ4": "600 Гц",
+      "sliderEQ5": "1 кГц",
+      "sliderEQ6": "3 кГц",
+      "sliderEQ7": "6 кГц",
+      "sliderEQ8": "12 кГц",
+      "sliderEQ9": "14 кГц",
+      "sliderEQ10": "16 кГц",
       "sliderGain": "Усиление эквалайзера (дБ)"
     };
 
@@ -232,23 +277,15 @@
       }
     };
 
-    // Собираем все слайдеры в один массив
-    const sliders = [];
-    jsonData.components.forEach(c => {
-      if (c.type === "JSlider" && typeof c.value === "number") {
-        sliders.push({ name: c.name, max: c.value });
-      }
-    });
-    jsonData.equalizer.components.forEach(c => {
-      if (c.type === "JSlider" && typeof c.value === "number") {
-        sliders.push({ name: c.name, max: c.value });
-      }
-    });
+    // Разделяем слайдеры на цветокоррекцию и эквалайзер
+    const colorSliders = jsonData.components.filter(c => c.type === "JSlider");
+    const equalizerSliders = jsonData.equalizer.components.filter(c => c.type === "JSlider");
 
-    const paramsDiv = document.getElementById("params");
+    const colorParamsDiv = document.getElementById("color-params");
+    const equalizerParamsDiv = document.getElementById("equalizer-params");
 
-    // Создаем поля min и max для каждого слайдера (min = 0 по умолчанию, можно менять)
-    sliders.forEach(({ name, max }) => {
+    // Функция создания строки параметров
+    function createParamRow(name, max, container) {
       const row = document.createElement("div");
       row.className = "param-row";
 
@@ -259,7 +296,6 @@
       const inputMin = document.createElement("input");
       inputMin.type = "number";
       inputMin.id = `min_${name}`;
-
       inputMin.step = 1;
       inputMin.style.width = "60px";
 
@@ -294,15 +330,36 @@
         info.textContent = `(от -${max} до ${max})`;
       }
 
-      row.appendChild(info);
-
       row.appendChild(label);
       row.appendChild(inputMin);
       row.appendChild(labelMax);
       row.appendChild(inputMax);
       row.appendChild(info);
 
-      paramsDiv.appendChild(row);
+      container.appendChild(row);
+    }
+
+    // Создаем параметры для цветокоррекции
+    colorSliders.forEach(({ name, value }) => {
+      createParamRow(name, value, colorParamsDiv);
+    });
+
+    // Создаем параметры для эквалайзера
+    equalizerSliders.forEach(({ name, value }) => {
+      createParamRow(name, value, equalizerParamsDiv);
+    });
+
+    // Обработчики переключения вкладок
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Убираем активный класс у всех вкладок и контента
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        // Добавляем активный класс текущей вкладке и соответствующему контенту
+        tab.classList.add('active');
+        document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+      });
     });
 
     // Функция случайного целого от min до max включительно
@@ -1868,9 +1925,12 @@
 `;
 
     function generate() {
+      // Собираем все слайдеры в один массив для удобства
+      const allSliders = [...colorSliders, ...equalizerSliders];
+
       // Собираем диапазоны
       const rangeMap = {};
-      sliders.forEach(({ name }) => {
+      allSliders.forEach(({ name, value: max }) => {
         const minVal = Number(document.getElementById(`min_${name}`).value);
         const maxVal = Number(document.getElementById(`max_${name}`).value);
         rangeMap[name] = { min: minVal, max: maxVal };
@@ -1898,34 +1958,92 @@
       });
 
       // Сохраняем в файл
-      saveToFile(result);
+      saveToFile(result, "enc");
     }
 
-    function saveToFile(content) {
-      // Формируем название файла: preset_YYYYMMDD_HHMMSS.enc
-      const now = new Date();
-      const pad = (n) => n.toString().padStart(2, '0');
-      const filename = `preset_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.enc`;
+function saveToFile(content, fileType) {
+  const now = new Date();
+  const pad = (n) => n.toString().padStart(2, '0');
 
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+  let mimeType = null;
+  let baseName = null;
+  
+  if (fileType === "json") {
+    mimeType = 'application/json';
+    baseName = "settings";
+  } else if (fileType === "enc") {
+    baseName = "preset";
+    mimeType = 'text/plain;charset=utf-8';
+  }
 
-    function saveSettings() {
-      const settings = {};
-      sliders.forEach(({ name }) => {
+  const fileName = `${baseName}_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${fileType}`;
+
+  const blob = new Blob([content], { type: mimeType });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+    function getFullSettings() {
+      const settings = {
+        color: {},
+        equalizer: {}
+      };
+
+      colorSliders.forEach(({ name }) => {
         const inputMin = document.getElementById(`min_${name}`);
         const inputMax = document.getElementById(`max_${name}`);
-        settings[name] = {
+
+        settings.color[name] = {
           min: parseFloat(inputMin.value),
           max: parseFloat(inputMax.value)
         };
       });
+
+      equalizerSliders.forEach(({ name }) => {
+        const inputMin = document.getElementById(`min_${name}`);
+        const inputMax = document.getElementById(`max_${name}`);
+
+        settings.equalizer[name] = {
+          min: parseFloat(inputMin.value),
+          max: parseFloat(inputMax.value)
+        };
+      });
+
+      return settings;
+    }
+
+    function applyFullSettings(settings) {
+      if (settings.color) {
+        colorSliders.forEach(({ name }) => {
+          if (settings.color[name]) {
+            const inputMin = document.getElementById(`min_${name}`);
+            const inputMax = document.getElementById(`max_${name}`);
+            inputMin.value = settings.color[name].min;
+            inputMax.value = settings.color[name].max;
+          }
+        });
+      }
+
+      if (settings.equalizer) {
+        equalizerSliders.forEach(({ name }) => {
+          if (settings.equalizer[name]) {
+            const inputMin = document.getElementById(`min_${name}`);
+            const inputMax = document.getElementById(`max_${name}`);
+            inputMin.value = settings.equalizer[name].min;
+            inputMax.value = settings.equalizer[name].max;
+          }
+        });
+      }
+
+      localStorage.setItem("sliderSettings", JSON.stringify(settings));
+    }
+
+    function saveSettings() {
+      const settings = getFullSettings();
       localStorage.setItem("sliderSettings", JSON.stringify(settings));
     }
 
@@ -1935,35 +2053,52 @@
 
       try {
         const settings = JSON.parse(saved);
-        sliders.forEach(({ name, max }) => {
-          if (settings[name]) {
-            const s = settings[name];
-            const inputMin = document.getElementById(`min_${name}`);
-            const inputMax = document.getElementById(`max_${name}`);
-            inputMin.value = s.min;
-            inputMax.value = s.max;
-          }
-        });
+        applyFullSettings(settings);
       } catch (e) {
         console.warn("Ошибка при загрузке настроек:", e);
       }
     }
 
+    document.getElementById("saveToFile").addEventListener("click", () => {
+      const settings = getFullSettings();
+      saveToFile(JSON.stringify(settings, null, 2), "json");
+    });
+
+    document.getElementById("loadFromFile").addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try {
+          const settings = JSON.parse(evt.target.result);
+          applyFullSettings(settings);
+        } catch (err) {
+          alert("Ошибка загрузки настроек");
+        }
+      };
+      reader.readAsText(file);
+    });
+
     document.addEventListener("DOMContentLoaded", () => {
-      loadSettings(); // 🔄 автозагрузка при старте
+      const saved = localStorage.getItem("sliderSettings");
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          applyFullSettings(settings);
+        } catch (e) {
+          console.warn("⚠️ Ошибка загрузки локальных настроек:", e);
+        }
+      }
 
-      // Добавляем слежение за всеми input'ами
-      sliders.forEach(({ name }) => {
-        const inputMin = document.getElementById(`min_${name}`);
-        const inputMax = document.getElementById(`max_${name}`);
-
-        inputMin.addEventListener("input", saveSettings);
-        inputMax.addEventListener("input", saveSettings);
+      // Добавляем обработчики изменений для всех полей ввода
+      [...colorSliders, ...equalizerSliders].forEach(({ name }) => {
+        document.getElementById(`min_${name}`).addEventListener("input", saveSettings);
+        document.getElementById(`max_${name}`).addEventListener("input", saveSettings);
       });
     });
 
     document.getElementById("resetBtn").addEventListener("click", () => {
-      sliders.forEach(({ name, max }) => {
+      colorSliders.forEach(({ name, value: max }) => {
         document.getElementById(`max_${name}`).value = max;
 
         const minField = document.getElementById(`min_${name}`);
@@ -1974,6 +2109,11 @@
         } else {
           minField.value = -max;
         }
+      });
+
+      equalizerSliders.forEach(({ name, value: max }) => {
+        document.getElementById(`max_${name}`).value = max;
+        document.getElementById(`min_${name}`).value = -max;
       });
     });
 
